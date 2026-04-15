@@ -1,19 +1,18 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking, Alert } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ExpoHaptics from 'expo-haptics';
-import { useVault } from '../context/VaultContext';
-import { useToast } from '../components/Toast';
-import { RADIUS, SPACING } from '../theme';
-import { useTheme } from '../hooks/useTheme';
-import { useAuth } from '../context/AuthContext';
+import * as Sharing from 'expo-sharing';
+import { useState } from 'react';
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useToast } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
+import { useVault } from '../context/VaultContext';
+import { useTheme } from '../hooks/useTheme';
+import { RADIUS, SPACING } from '../theme';
 
-import StatBox from '../components/StatBox';
 import SectionCard from '../components/SectionCard';
-import { cancelReminder } from '../utils/notifications';
+import StatBox from '../components/StatBox';
 import { clearCredentials } from '../utils/storage';
 
 const SettingsScreen = () => {
@@ -23,6 +22,7 @@ const SettingsScreen = () => {
   const toast = useToast();
   const insets = useSafeAreaInsets();
   const [clearConfirm, setClearConfirm] = useState(false);
+  const [showExportWarning, setShowExportWarning] = useState(false);
 
   // Stats
   const totalCount = credentials.length;
@@ -30,11 +30,17 @@ const SettingsScreen = () => {
   const taggedCount = credentials.filter(c => c.tags?.length > 0).length;
 
   const handleExport = async () => {
+    setShowExportWarning(true);
+  };
+  
+  const confirmExport = async () => {
+    setShowExportWarning(false);
     try {
       const backupData = {
-        v: 1,
+        v: 3,
         exportedAt: new Date().toISOString(),
-        data: credentials
+        data: credentials,
+        note: 'This backup is encrypted with device key storage. Restore on the same device or after re-enabling biometrics.'
       };
       
       const fileName = `vault_backup_${Date.now()}.json`;
@@ -95,6 +101,7 @@ const SettingsScreen = () => {
   };
 
   return (
+    <>
     <ScrollView 
       style={[styles.container, { backgroundColor: colors.bg }]} 
       contentContainerStyle={[styles.scrollContent, { paddingBottom: SPACING.lg + insets.bottom }]}
@@ -206,8 +213,37 @@ const SettingsScreen = () => {
         )}
       </SectionCard>
 
-      <Text style={[styles.versionText, { color: colors.muted2 }]}>SecureVault v1.0.0 · Fully Offline</Text>
+      <Text style={[styles.versionText, { color: colors.muted2 }]}>SecureVault v2.0.0 · Fully Offline</Text>
     </ScrollView>
+    
+    <Modal
+      visible={showExportWarning}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowExportWarning(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { backgroundColor: colors.surf, borderColor: colors.border }]}>
+          <Text style={[styles.modalTitle, { color: colors.textBright }]}>⚠️ Export Warning</Text>
+          <Text style={[styles.modalText, { color: colors.text }]}>
+            This backup file contains your encrypted credentials.{'\n\n'}
+            • The data is encrypted with device key storage{'\n'}
+            • Restore on the same device or after re-enabling biometrics{'\n'}
+            • The encryption key is tied to this device{'\n'}
+            • Store this backup securely
+          </Text>
+          <View style={styles.modalActions}>
+            <Pressable onPress={() => setShowExportWarning(false)} style={[styles.modalBtn, { backgroundColor: colors.surf3 }]}>
+              <Text style={[styles.modalBtnText, { color: colors.text }]}>Cancel</Text>
+            </Pressable>
+            <Pressable onPress={confirmExport} style={[styles.modalBtn, { backgroundColor: colors.accent }]}>
+              <Text style={[styles.modalBtnText, { color: colors.bg }]}>I Understand, Export</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 };
 
@@ -362,6 +398,45 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  modalContent: {
+    borderRadius: RADIUS.lg,
+    padding: SPACING.xl,
+    borderWidth: 1,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 16,
+  },
+  modalText: {
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+  },
+  modalBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

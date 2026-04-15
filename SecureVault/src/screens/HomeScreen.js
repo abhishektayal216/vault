@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, Pressable, Animated } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useVault } from '../context/VaultContext';
-import { useToast } from '../components/Toast';
-import { RADIUS, SPACING } from '../theme';
-import { useTheme } from '../hooks/useTheme';
-import CredentialCard from '../components/CredentialCard';
-import { requestPermissions } from '../utils/notifications';
-import * as Haptics from 'expo-haptics';
 import { useIsFocused } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import CredentialCard from '../components/CredentialCard';
+import { useToast } from '../components/Toast';
+import { useVault } from '../context/VaultContext';
+import { useTheme } from '../hooks/useTheme';
+import { RADIUS, SPACING } from '../theme';
+import { requestPermissions } from '../utils/notifications';
 
 const HomeScreen = ({ navigation }) => {
   const { credentials, loading, markReminderFired } = useVault();
@@ -47,10 +47,20 @@ const HomeScreen = ({ navigation }) => {
       <View style={styles.header}>
         <Text style={[styles.logo, { color: colors.accent }]}>🔐 SecureVault</Text>
         <View style={styles.headerActions}>
-          <Pressable onPress={() => setShowSearch(!showSearch)} style={styles.headerBtn}>
+          <Pressable 
+            onPress={() => setShowSearch(!showSearch)} 
+            style={styles.headerBtn}
+            accessibilityLabel={showSearch ? 'Close search' : 'Search credentials'}
+            accessibilityRole="button"
+          >
             <Text style={[styles.btnText, { color: colors.text }]}>{showSearch ? '✖' : '🔍'}</Text>
           </Pressable>
-          <Pressable onPress={() => navigation.navigate('Settings')} style={styles.headerBtn}>
+          <Pressable 
+            onPress={() => navigation.navigate('Settings')} 
+            style={styles.headerBtn}
+            accessibilityLabel="Open settings"
+            accessibilityRole="button"
+          >
             <Text style={[styles.btnText, { color: colors.text }]}>⚙️</Text>
           </Pressable>
         </View>
@@ -71,12 +81,17 @@ const HomeScreen = ({ navigation }) => {
           value={search}
           onChangeText={setSearch}
           autoFocus={showSearch}
+          accessibilityLabel="Search credentials"
+          accessibilityHint="Type to search through your credentials by title or tags"
         />
       </Animated.View>
 
       {/* Stats row */}
       <View style={styles.statsRow}>
         <Text style={[styles.statsText, { color: colors.muted }]}>{credentials.length} credentials</Text>
+        <View style={[styles.offlineBadge, { backgroundColor: colors.surf3 }]}>
+          <Text style={[styles.offlineText, { color: colors.muted }]}>📴 Offline</Text>
+        </View>
         {upcomingCount > 0 && (
           <View style={[styles.upcomingBadge, { backgroundColor: isDark ? 'rgba(255, 183, 0, 0.1)' : 'rgba(245, 158, 11, 0.1)' }]}>
             <Text style={[styles.upcomingText, { color: colors.warn }]}>⏰ {upcomingCount} upcoming</Text>
@@ -113,6 +128,9 @@ const HomeScreen = ({ navigation }) => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           navigation.navigate('AddEdit', { mode: 'add' });
         }}
+        accessibilityLabel="Add new credential"
+        accessibilityRole="button"
+        accessibilityHint="Create a new credential entry"
       >
         <Text style={[styles.fabText, { color: isDark ? colors.bg : '#fff' }]}>+</Text>
       </Pressable>
@@ -173,6 +191,16 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   upcomingText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  offlineBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 10,
+  },
+  offlineText: {
     fontSize: 11,
     fontWeight: '600',
   },

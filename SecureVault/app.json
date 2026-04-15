@@ -13,14 +13,24 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.securevault.app"
+      "bundleIdentifier": "com.yourcompany.securevault",
+      "infoPlist": {
+        "UIFileSharingEnabled": false,
+        "NSFaceIDUsageDescription": "Authenticate to access your secure vault",
+        "NSRequiresScreenSecurity": true
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#18253a"
       },
-      "package": "com.securevault.app"
+      "package": "com.yourcompany.securevault",
+      "permissions": [
+        "USE_FINGERPRINT",
+        "USE_BIOMETRIC"
+      ],
+      "secure": true
     },
     "web": {
       "favicon": "./assets/images/favicon.png"

@@ -1,16 +1,16 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Animated } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import * as ExpoHaptics from 'expo-haptics';
-import { useVault } from '../context/VaultContext';
-import { useToast } from '../components/Toast';
-import { decrypt } from '../utils/crypto';
-import { RADIUS, SPACING, FONT_MONO } from '../theme';
-import { useTheme } from '../hooks/useTheme';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TagChip from '../components/TagChip';
-import { Ionicons } from '@expo/vector-icons';
+import { useToast } from '../components/Toast';
+import { useVault } from '../context/VaultContext';
+import { useTheme } from '../hooks/useTheme';
+import { FONT_MONO, RADIUS, SPACING } from '../theme';
+import { decrypt } from '../utils/crypto';
 import { parseVaultData } from '../utils/vaultData';
 
 const DetailScreen = ({ route, navigation }) => {
@@ -23,25 +23,58 @@ const DetailScreen = ({ route, navigation }) => {
   const [decryptedData, setDecryptedData] = useState('');
   const [fields, setFields] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [decryptionError, setDecryptionError] = useState('');
+  const cleanupTimerRef = useRef(null);
 
   useFocusEffect(
     useCallback(() => {
       // Auto-decrypt on focus
-      const data = decrypt(credential.encData);
-      setDecryptedData(data);
-      setFields(parseVaultData(data));
+      const decryptData = async () => {
+        try {
+          setLoading(true);
+          setDecryptionError('');
+          const data = await decrypt(credential.encData);
+          setDecryptedData(data);
+          setFields(parseVaultData(data));
+          
+          // Auto-cleanup after 5 minutes of inactivity
+          if (cleanupTimerRef.current) clearTimeout(cleanupTimerRef.current);
+          cleanupTimerRef.current = setTimeout(() => {
+            setDecryptedData('');
+            setFields([]);
+          }, 300000); // 5 minutes
+        } catch (error) {
+          console.error('Decryption error:', error);
+          setDecryptionError('Failed to decrypt credential. Data may be corrupted.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      decryptData();
 
       return () => {
+        // Clear sensitive data immediately
         setDecryptedData('');
         setFields([]);
+        setLoading(false);
+        setDecryptionError('');
+        if (cleanupTimerRef.current) clearTimeout(cleanupTimerRef.current);
       };
     }, [credential.encData])
   );
 
 
   const handleCopyValue = async (val) => {
-    await Clipboard.setStringAsync(val);
-    ExpoHaptics.impactAsync(ExpoHaptics.ImpactFeedbackStyle.Light);
+    try {
+      await Clipboard.setStringAsync(val);
+      ExpoHaptics.impactAsync(ExpoHaptics.ImpactFeedbackStyle.Light);
+      toast.show('Copied to clipboard', 'ok');
+    } catch (error) {
+      console.error('Clipboard error:', error);
+      toast.show('Failed to copy', 'err');
+    }
   };
 
   const handleDelete = async () => {
@@ -58,48 +91,80 @@ const DetailScreen = ({ route, navigation }) => {
 
   const getReminderDisplay = () => {
     if (!credential.reminder) return '';
-    const date = new Date(credential.reminder);
+    try {
+      const date = new Date(credential.reminder);
     const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const day = date.getDate();
     
-    if (!credential.recurrence || credential.recurrence === 'none') {
-      return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
-    }
+      if (!credential.recurrence || credential.recurrence === 'none') {
+        return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+      }
     
-    if (credential.recurrence === 'daily') {
-      return `Every Day at ${timeStr}`;
-    }
+      if (credential.recurrence === 'daily') {
+        return `Every Day at ${timeStr}`;
+      }
     
-    if (credential.recurrence === 'weekly' && credential.recurrenceDays) {
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const days = credential.recurrenceDays.map(d => dayNames[d - 1]).join(', ');
-      return `Every ${days} at ${timeStr}`;
-    }
+      if (credential.recurrence === 'weekly' && credential.recurrenceDays) {
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const days = credential.recurrenceDays.map(d => dayNames[d - 1]).join(', ');
+        return `Every ${days} at ${timeStr}`;
+      }
     
-    if (credential.recurrence === 'monthly') {
-      const getSuffix = (d) => {
-        if (d > 3 && d < 21) return 'th';
-        switch (d % 10) {
-          case 1: return 'st';
-          case 2: return 'nd';
-          case 3: return 'rd';
-          default: return 'th';
-        }
-      };
-      return `Monthly (on the ${day}${getSuffix(day)}) at ${timeStr}`;
-    }
+      if (credential.recurrence === 'monthly') {
+        const getSuffix = (d) => {
+          if (d > 3 && d < 21) return 'th';
+          switch (d % 10) {
+            case 1: return 'st';
+            case 2: return 'nd';
+            case 3: return 'rd';
+            default: return 'th';
+          }
+        };
+        return `Monthly (on the ${day}${getSuffix(day)}) at ${timeStr}`;
+      }
     
-    if (credential.recurrence === 'yearly' && credential.recurrenceMonths) {
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const months = credential.recurrenceMonths.map(m => monthNames[m]).join(', ');
-      return `Every ${months} at ${timeStr}`;
+      if (credential.recurrence === 'yearly' && credential.recurrenceMonths) {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const months = credential.recurrenceMonths.map(m => monthNames[m]).join(', ');
+        return `Every ${months} at ${timeStr}`;
+      }
+      
+      return `Repeats ${credential.recurrence} at ${timeStr}`;
+    } catch (error) {
+      console.error('Error parsing reminder:', error);
+      return 'Reminder set';
     }
-    
-    return `Repeats ${credential.recurrence} at ${timeStr}`;
   };
 
-  const isReminderUpcoming = credential.reminder && !credential.rFired && new Date(credential.reminder) > new Date();
+  const [reminderDisplay, setReminderDisplay] = useState('');
+  
+  useEffect(() => {
+    setReminderDisplay(getReminderDisplay());
+  }, [credential.reminder, credential.recurrence, credential.recurrenceDays, credential.recurrenceMonths, credential.origDay]);
+  
+  const isReminderUpcoming = credential.reminder && !credential.rFired && reminderDisplay && !reminderDisplay.includes('Reminded on');
 
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
+        <Text style={[styles.loadingText, { color: colors.muted }]}>Decrypting...</Text>
+      </View>
+    );
+  }
+  
+  if (decryptionError) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center', padding: SPACING.xl }]}>
+        <Text style={[styles.errorTitle, { color: colors.err }]}>Decryption Failed</Text>
+        <Text style={[styles.errorMessage, { color: colors.text }]}>{decryptionError}</Text>
+        <Pressable onPress={() => navigation.goBack()} style={[styles.backBtn, { backgroundColor: colors.surf2 }]}>
+          <Text style={[styles.backBtnText, { color: colors.text }]}>Go Back</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: colors.bg }]} 
@@ -107,7 +172,7 @@ const DetailScreen = ({ route, navigation }) => {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>{credential.title}</Text>
+        <Text style={styles.title}>{credential.title || 'Encrypted Title'}</Text>
         <View style={styles.tagsContainer}>
           {credential.tags?.map((tag, i) => (
             <TagChip key={i} label={tag} />
@@ -118,8 +183,8 @@ const DetailScreen = ({ route, navigation }) => {
           <View style={[styles.reminderBadge, isReminderUpcoming ? styles.upcomingBadge : styles.firedBadge, !isReminderUpcoming && { backgroundColor: colors.surf2 }]}>
             <Text style={[styles.reminderText, { color: colors.warn }, !isReminderUpcoming && { color: colors.muted }]}>
               {isReminderUpcoming 
-                ? `⏰ ${getReminderDisplay()}` 
-                : `✓ Reminded on ${formatDate(credential.reminder)}`}
+                ? `⏰ ${reminderDisplay}` 
+                : `✓ Reminded`}
             </Text>
           </View>
         )}
@@ -143,13 +208,13 @@ const DetailScreen = ({ route, navigation }) => {
             >
               <View style={styles.ledgerMetadata}>
                 <Text style={[styles.ledgerKey, { color: colors.accent + 'AA' }]}>{field.key || 'FIELD'}</Text>
-                <Text selectable style={[styles.ledgerValue, { color: colors.textBright }]}>
+                <Text style={[styles.ledgerValue, { color: colors.textBright }]}>
                   {field.value}
                 </Text>
               </View>
               
               <Pressable 
-                onPress={() => handleCopyValue(field.value, field.key)} 
+                onPress={() => handleCopyValue(field.value)} 
                 style={styles.ledgerActionBtn}
               >
                 <Ionicons name="copy-outline" size={18} color={colors.muted} />
@@ -392,6 +457,30 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 11,
     marginBottom: 4,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 16,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  errorMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  backBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+  },
+  backBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

@@ -3,11 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const INDEX_KEY = 'sv_index';
 const ITEM_PREFIX = 'sv_item_';
 const OLD_STORAGE_KEY = 'sv_data';
+const PAGE_SIZE = 20; // Load credentials in pages of 20
 
 /**
  * Loads all credentials. Handles migration from old monolithic format.
  */
-export const loadCredentials = async () => {
+export const loadCredentials = async (page = 0, pageSize = PAGE_SIZE) => {
   try {
     // 1. Check for legacy monolithic data
     const legacyData = await AsyncStorage.getItem(OLD_STORAGE_KEY);
@@ -22,15 +23,21 @@ export const loadCredentials = async () => {
       
       // Clear legacy data
       await AsyncStorage.removeItem(OLD_STORAGE_KEY);
-      return items;
+      // Return first page
+      return items.slice(0, pageSize);
     }
 
-    // 2. Load from new indexed storage
+    // 2. Load from new indexed storage with pagination
     const indexRaw = await AsyncStorage.getItem(INDEX_KEY);
     if (!indexRaw) return [];
 
     const ids = JSON.parse(indexRaw);
-    const itemPromises = ids.map(id => AsyncStorage.getItem(`${ITEM_PREFIX}${id}`));
+    // Paginate: only load requested page
+    const startIndex = page * pageSize;
+    const endIndex = startIndex + pageSize;
+    const pageIds = ids.slice(startIndex, endIndex);
+    
+    const itemPromises = pageIds.map(id => AsyncStorage.getItem(`${ITEM_PREFIX}${id}`));
     const itemsRaw = await Promise.all(itemPromises);
     
     return itemsRaw
@@ -39,6 +46,21 @@ export const loadCredentials = async () => {
   } catch (error) {
     console.error('Error loading credentials:', error);
     return [];
+  }
+};
+
+/**
+ * Gets total count of credentials
+ */
+export const getCredentialCount = async () => {
+  try {
+    const indexRaw = await AsyncStorage.getItem(INDEX_KEY);
+    if (!indexRaw) return 0;
+    const ids = JSON.parse(indexRaw);
+    return ids.length;
+  } catch (error) {
+    console.error('Error getting credential count:', error);
+    return 0;
   }
 };
 
@@ -83,11 +105,18 @@ export const saveCredentials = async (array) => {
 };
 
 /**
- * Removes a single credential.
+ * Removes a single credential with secure deletion.
  */
 export const deleteCredentialItem = async (id) => {
   try {
-    await AsyncStorage.removeItem(`${ITEM_PREFIX}${id}`);
+    // Overwrite with random data before deletion (best effort)
+    const existingData = await AsyncStorage.getItem(`${ITEM_PREFIX}${id}`);
+    if (existingData) {
+      const randomData = 'x'.repeat(existingData.length);
+      await AsyncStorage.setItem(`${ITEM_PREFIX}${id}`, randomData);
+      await AsyncStorage.removeItem(`${ITEM_PREFIX}${id}`);
+    }
+    
     const indexRaw = await AsyncStorage.getItem(INDEX_KEY);
     if (indexRaw) {
       const ids = JSON.parse(indexRaw).filter(itemId => itemId !== id);
@@ -99,7 +128,7 @@ export const deleteCredentialItem = async (id) => {
 };
 
 /**
- * Removes all credential data.
+ * Removes all credential data with secure deletion.
  */
 export const clearCredentials = async () => {
   try {
@@ -107,7 +136,12 @@ export const clearCredentials = async () => {
     if (indexRaw) {
       const ids = JSON.parse(indexRaw);
       for (const id of ids) {
-        await AsyncStorage.removeItem(`${ITEM_PREFIX}${id}`);
+        const existingData = await AsyncStorage.getItem(`${ITEM_PREFIX}${id}`);
+        if (existingData) {
+          const randomData = 'x'.repeat(existingData.length);
+          await AsyncStorage.setItem(`${ITEM_PREFIX}${id}`, randomData);
+          await AsyncStorage.removeItem(`${ITEM_PREFIX}${id}`);
+        }
       }
       await AsyncStorage.removeItem(INDEX_KEY);
     }

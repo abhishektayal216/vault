@@ -1,22 +1,22 @@
-import React, { useEffect } from 'react';
 import { NavigationContainer, DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { VaultProvider } from './src/context/VaultContext';
 import { ToastProvider } from './src/components/Toast';
-import { requestPermissions } from './src/utils/notifications';
-import { DARK_COLORS, LIGHT_COLORS } from './src/theme';
-import { ThemeProvider } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ThemeProvider } from './src/context/ThemeContext';
+import { VaultProvider } from './src/context/VaultContext';
 import { useTheme } from './src/hooks/useTheme';
+import { DARK_COLORS, LIGHT_COLORS } from './src/theme';
+import { requestPermissions } from './src/utils/notifications';
 
 // Screens
-import HomeScreen from './src/screens/HomeScreen';
 import AddEditScreen from './src/screens/AddEditScreen';
 import DetailScreen from './src/screens/DetailScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
+import HomeScreen from './src/screens/HomeScreen';
 import LockScreen from './src/screens/LockScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
 

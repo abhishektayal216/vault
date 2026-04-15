@@ -1,16 +1,44 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../hooks/useTheme';
 import { RADIUS, SPACING } from '../theme';
-import { Ionicons } from '@expo/vector-icons';
 
-const LockScreen = () => {
-  const { authenticate, isBiometricsAvailable, loading, securityEnabled } = useAuth();
+const LockScreen = ({ navigation }) => {
+  const { authenticate, isBiometricsAvailable, loading, securityEnabled, isLockedOut, getLockoutRemaining } = useAuth();
   const { colors } = useTheme();
+  
+  const isAttempting = useRef(false);
+  const [authError, setAuthError] = useState('');
+  const [lockoutRemaining, setLockoutRemaining] = useState(0);
   
   const fadeAnim = new Animated.Value(0);
   const scaleAnim = new Animated.Value(0.9);
+
+  const handleAuthenticate = async () => {
+    if (isAttempting.current) return;
+    if (isLockedOut()) {
+      setLockoutRemaining(getLockoutRemaining());
+      return;
+    }
+    
+    isAttempting.current = true;
+    setAuthError('');
+    try {
+      await authenticate();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setAuthError(error.message);
+      if (isLockedOut()) {
+        setLockoutRemaining(getLockoutRemaining());
+      }
+    } finally {
+      isAttempting.current = false;
+    }
+  };
 
   useEffect(() => {
     Animated.parallel([
@@ -18,14 +46,28 @@ const LockScreen = () => {
       Animated.spring(scaleAnim, { toValue: 1, friction: 8, useNativeDriver: true }),
     ]).start();
 
-    // Auto-trigger only AFTER loading is done and security is verified
-    if (!loading && securityEnabled) {
+    // Auto-trigger biometric if available
+    if (!loading && securityEnabled && isBiometricsAvailable) {
       const timer = setTimeout(() => {
-        authenticate();
+        handleAuthenticate();
       }, 800);
       return () => clearTimeout(timer);
     }
-  }, [loading, securityEnabled]);
+  }, [loading, securityEnabled, isBiometricsAvailable]);
+  
+  // Update lockout countdown
+  useEffect(() => {
+    if (lockoutRemaining > 0) {
+      const interval = setInterval(() => {
+        const remaining = getLockoutRemaining();
+        setLockoutRemaining(remaining);
+        if (remaining === 0) {
+          clearInterval(interval);
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [lockoutRemaining]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -42,17 +84,31 @@ const LockScreen = () => {
           Fingerprint or FaceID required to access your credentials
         </Text>
 
-        <Pressable 
-          onPress={authenticate}
-          style={({ pressed }) => [
-            styles.unlockBtn,
-            { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 }
-          ]}
-        >
-          <Text style={[styles.unlockBtnText, { color: colors.bg }]}>
-            {isBiometricsAvailable ? 'Unlock with Biometrics' : 'Enter Passcode'}
-          </Text>
-        </Pressable>
+        {lockoutRemaining > 0 && (
+          <View style={[styles.lockoutBanner, { backgroundColor: colors.err + '20' }]}>
+            <Ionicons name="time" size={16} color={colors.err} />
+            <Text style={[styles.lockoutText, { color: colors.err }]}>
+              Too many attempts. Try again in {lockoutRemaining}s
+            </Text>
+          </View>
+        )}
+
+        {isBiometricsAvailable && (
+          <Pressable 
+            onPress={() => handleAuthenticate()}
+            disabled={lockoutRemaining > 0}
+            style={({ pressed }) => [
+              styles.unlockBtn,
+              { backgroundColor: colors.accent, opacity: pressed || lockoutRemaining > 0 ? 0.5 : 1 }
+            ]}
+          >
+            <Text style={[styles.unlockBtnText, { color: colors.bg }]}>Unlock with Biometrics</Text>
+          </Pressable>
+        )}
+
+        {authError ? (
+          <Text style={[styles.errorText, { color: colors.err }]}>{authError}</Text>
+        ) : null}
         
         <Text style={[styles.footerText, { color: colors.muted2 }]}>
           SecureVault · Encrypted Offline Storage
@@ -114,6 +170,24 @@ const styles = StyleSheet.create({
     bottom: -100,
     fontSize: 12,
     fontWeight: '500',
+  },
+  lockoutBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.sm,
+    marginTop: 16,
+    gap: 8,
+  },
+  lockoutText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  errorText: {
+    fontSize: 13,
+    marginTop: 12,
+    textAlign: 'center',
   },
 });
 

@@ -1,18 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, StyleSheet, TextInput, Pressable, ScrollView, 
-  KeyboardAvoidingView, Platform, ActivityIndicator, Dimensions
-} from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { useVault } from '../context/VaultContext';
-import { useToast } from '../components/Toast';
-import { decrypt } from '../utils/crypto';
-import { scheduleReminder, cancelReminder } from '../utils/notifications';
-import { RADIUS, SPACING, FONT_MONO } from '../theme';
-import { useTheme } from '../hooks/useTheme';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Haptics from 'expo-haptics';
+import { useEffect, useState } from 'react';
+import {
+    ActivityIndicator, Dimensions,
+    KeyboardAvoidingView, Platform,
+    Pressable, ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useToast } from '../components/Toast';
+import { useVault } from '../context/VaultContext';
+import { useTheme } from '../hooks/useTheme';
+import { FONT_MONO, RADIUS, SPACING } from '../theme';
+import { decrypt } from '../utils/crypto';
+import { cancelReminder, scheduleReminder } from '../utils/notifications';
+import { calculateNextOccurrence } from '../utils/reminderMath';
 import { parseVaultData, serializeVaultData } from '../utils/vaultData';
 
 const AddEditScreen = ({ route, navigation }) => {
@@ -39,24 +45,85 @@ const AddEditScreen = ({ route, navigation }) => {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    if (isEdit && credential) {
-      setTitle(credential.title);
-      setTags(credential.tags?.join(', ') || '');
-      setReminder(credential.reminder ? new Date(credential.reminder) : null);
-      setRecurrence(credential.recurrence || 'none');
-      setRecurrenceDays(credential.recurrenceDays || []);
-      setRecurrenceMonths(credential.recurrenceMonths || []);
-      
-      const decrypted = decrypt(credential.encData);
-      setFields(parseVaultData(decrypted));
-    }
+    const loadCredentialData = async () => {
+      if (isEdit && credential) {
+        try {
+          setTitle(credential.title || '');
+          setTags(credential.tags?.join(', ') || '');
+          
+          // Reminder is stored unencrypted for display
+          if (credential.reminder) {
+            setReminder(new Date(credential.reminder));
+          } else {
+            setReminder(null);
+          }
+          
+          setRecurrence(credential.recurrence || 'none');
+          setRecurrenceDays(credential.recurrenceDays || []);
+          setRecurrenceMonths(credential.recurrenceMonths || []);
+          
+          const decrypted = await decrypt(credential.encData);
+          setFields(parseVaultData(decrypted));
+        } catch (error) {
+          console.error('Error loading credential:', error);
+          setFields([{ id: '1', key: 'Note', value: '', sensitive: false }]);
+        }
+      }
+    };
+    
+    loadCredentialData();
   }, [isEdit, credential]);
 
   const validate = () => {
     const newErrors = {};
-    if (!title.trim()) newErrors.title = 'Title is required';
+    
+    // Title validation
+    if (!title.trim()) {
+      newErrors.title = 'Title is required';
+    } else if (title.length > 100) {
+      newErrors.title = 'Title must be less than 100 characters';
+    } else if (/[<>"'&]/.test(title)) {
+      newErrors.title = 'Title contains invalid characters';
+    }
+    
+    // Fields validation
     const hasValue = fields.some(f => f.value.trim());
-    if (!hasValue) newErrors.fields = 'At least one field value is required';
+    if (!hasValue) {
+      newErrors.fields = 'At least one field value is required';
+    } else {
+      fields.forEach((field, index) => {
+        if (field.value.length > 10000) {
+          newErrors[`field_${index}`] = 'Field value too long (max 10000 characters)';
+        }
+        if (field.key.length > 50) {
+          newErrors[`key_${index}`] = 'Field key too long (max 50 characters)';
+        }
+      });
+    }
+    
+    // Tags validation
+    if (tags) {
+      const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+      if (tagArray.length > 20) {
+        newErrors.tags = 'Too many tags (max 20)';
+      }
+      tagArray.forEach(tag => {
+        if (tag.length > 30) {
+          newErrors.tags = 'Tag too long (max 30 characters)';
+        }
+      });
+    }
+    
+    // Reminder validation
+    if (reminder && recurrence !== 'none') {
+      if (recurrence === 'weekly' && recurrenceDays.length === 0) {
+        newErrors.recurrence = 'Select at least one day for weekly reminders';
+      }
+      if (recurrence === 'yearly' && recurrenceMonths.length === 0) {
+        newErrors.recurrence = 'Select at least one month for yearly reminders';
+      }
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -562,24 +629,6 @@ const styles = StyleSheet.create({
   dayText: {
     fontSize: 12,
     fontWeight: '700',
-  },
-  reminderValue: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  reminderActions: {
-    flexDirection: 'row',
-  },
-  smallBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: RADIUS.s,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  smallBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
   },
   monthsGrid: {
     flexDirection: 'row',

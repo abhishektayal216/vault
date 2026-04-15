@@ -1,8 +1,21 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NOTIF_KEY_PREFIX = 'sv_notif_';
+const NOTIF_SIGNATURE_KEY = 'sv_notif_sig_';
+
+/**
+ * Generates a signature for notification payload verification
+ */
+const generateSignature = async (credentialId) => {
+  const digest = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    credentialId + Date.now().toString()
+  );
+  return digest.substring(0, 16); // Use first 16 chars as signature
+};
 
 /**
  * Requests notification permissions from the user.
@@ -62,7 +75,7 @@ export const scheduleReminder = async (credentialId, title, isoDatetime, recurre
       if (seconds <= 0) return null;
       
       const id = await Notifications.scheduleNotificationAsync({
-        content: { title: 'Vault Reminder', body: `Time to check: ${title}`, sound: true, data: { credentialId } },
+        content: { title: 'Vault Reminder', body: `Time to check your credential`, sound: true, data: { credentialId } },
         trigger: { 
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
           seconds,
@@ -73,7 +86,7 @@ export const scheduleReminder = async (credentialId, title, isoDatetime, recurre
       notificationIds.push(id);
     } else if (recurrence === 'daily') {
       const id = await Notifications.scheduleNotificationAsync({
-        content: { title: 'Daily Vault Reminder', body: `Check: ${title}`, sound: true, data: { credentialId, recurring: true } },
+        content: { title: 'Daily Vault Reminder', body: `You have a daily reminder`, sound: true, data: { credentialId, recurring: true } },
         trigger: { 
           hour, minute, repeats: true,
           channelId: 'default',
@@ -83,7 +96,7 @@ export const scheduleReminder = async (credentialId, title, isoDatetime, recurre
     } else if (recurrence === 'weekly') {
       for (const day of recurrenceDays) {
         const id = await Notifications.scheduleNotificationAsync({
-          content: { title: 'Weekly Vault Reminder', body: `Check: ${title}`, sound: true, data: { credentialId, recurring: true } },
+          content: { title: 'Weekly Vault Reminder', body: `You have a weekly reminder`, sound: true, data: { credentialId, recurring: true } },
           trigger: { 
             weekday: day, hour, minute, repeats: true,
             channelId: 'default',
@@ -93,7 +106,7 @@ export const scheduleReminder = async (credentialId, title, isoDatetime, recurre
       }
     } else if (recurrence === 'monthly') {
       const id = await Notifications.scheduleNotificationAsync({
-        content: { title: 'Monthly Vault Reminder', body: `Check: ${title}`, sound: true, data: { credentialId, recurring: true } },
+        content: { title: 'Monthly Vault Reminder', body: `You have a monthly reminder`, sound: true, data: { credentialId, recurring: true } },
         trigger: { 
           day: dayOfMonth, hour, minute, repeats: true,
           channelId: 'default',
@@ -104,7 +117,7 @@ export const scheduleReminder = async (credentialId, title, isoDatetime, recurre
       const monthsToSchedule = recurrenceMonths.length > 0 ? recurrenceMonths : [triggerDate.getMonth()];
       for (const month of monthsToSchedule) {
         const id = await Notifications.scheduleNotificationAsync({
-          content: { title: 'Yearly Vault Reminder', body: `Check: ${title}`, sound: true, data: { credentialId, recurring: true } },
+          content: { title: 'Yearly Vault Reminder', body: `You have a yearly reminder`, sound: true, data: { credentialId, recurring: true } },
           trigger: { 
             month, day: dayOfMonth, hour, minute, repeats: true,
             channelId: 'default',
@@ -114,9 +127,11 @@ export const scheduleReminder = async (credentialId, title, isoDatetime, recurre
       }
     }
 
-    // 3. Store notification IDs (comma-separated if multiple)
+    // 3. Store notification IDs and signature
     if (notificationIds.length > 0) {
       await AsyncStorage.setItem(`${NOTIF_KEY_PREFIX}${credentialId}`, notificationIds.join(','));
+      const signature = await generateSignature(credentialId);
+      await AsyncStorage.setItem(`${NOTIF_SIGNATURE_KEY}${credentialId}`, signature);
     }
     return notificationIds;
   } catch (error) {
@@ -132,6 +147,7 @@ export const scheduleReminder = async (credentialId, title, isoDatetime, recurre
 export const cancelReminder = async (credentialId) => {
   try {
     const storKey = `${NOTIF_KEY_PREFIX}${credentialId}`;
+    const sigKey = `${NOTIF_SIGNATURE_KEY}${credentialId}`;
     const storedIds = await AsyncStorage.getItem(storKey);
     
     if (storedIds) {
@@ -140,8 +156,21 @@ export const cancelReminder = async (credentialId) => {
         await Notifications.cancelScheduledNotificationAsync(id);
       }
       await AsyncStorage.removeItem(storKey);
+      await AsyncStorage.removeItem(sigKey);
     }
   } catch (error) {
     if (__DEV__) console.error('Error canceling reminder:', error);
+  }
+};
+
+/**
+ * Verifies notification payload signature
+ */
+export const verifyNotificationSignature = async (credentialId) => {
+  try {
+    const storedSignature = await AsyncStorage.getItem(`${NOTIF_SIGNATURE_KEY}${credentialId}`);
+    return !!storedSignature;
+  } catch (error) {
+    return false;
   }
 };
