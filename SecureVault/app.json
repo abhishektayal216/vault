@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "SecureVault",
+    "slug": "securevault",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#18253a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.securevault.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#18253a"
+      },
+      "package": "com.securevault.app"
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#00e5a0"
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ]
+  }
+}
