@@ -27,6 +27,8 @@ export const AuthProvider = ({ children }) => {
   const authInProgress = useRef(false);
   const sessionTimerRef = useRef(null);
   const activityTimerRef = useRef(null);
+  const justUnlocked = useRef(false);
+  const unlockCooldownRef = useRef(null);
 
   useEffect(() => {
     const init = async () => {
@@ -67,6 +69,7 @@ export const AuthProvider = ({ children }) => {
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
       if (activityTimerRef.current) clearTimeout(activityTimerRef.current);
       clearTimeout(fallbackTimer);
+      if (unlockCooldownRef.current) clearTimeout(unlockCooldownRef.current);
     };
   }, [securityEnabled, sessionTimeout]);
 
@@ -112,10 +115,12 @@ export const AuthProvider = ({ children }) => {
   const handleAppStateChange = (nextAppState: AppStateStatus) => {
     // Special handling for Biometric prompts which trigger 'inactive' state on Android
     // We only lock when the app definitely moves to 'background'
+    // Also respect the justUnlocked flag to prevent immediate re-locking
     if (
       appState.current.match(/active/) &&
       nextAppState === 'background' &&
-      !authInProgress.current
+      !authInProgress.current &&
+      !justUnlocked.current
     ) {
       // App went to background and we are not in the middle of authenticating
       if (securityEnabled) {
@@ -250,6 +255,14 @@ export const AuthProvider = ({ children }) => {
         await resetAuthAttempts();
         setLastActivity(Date.now());
         setIsLocked(false);
+        
+        // Set justUnlocked flag to prevent immediate re-locking
+        justUnlocked.current = true;
+        if (unlockCooldownRef.current) clearTimeout(unlockCooldownRef.current);
+        unlockCooldownRef.current = setTimeout(() => {
+          justUnlocked.current = false;
+        }, 2000); // 2 second cooldown after unlock
+        
         return true;
       } else {
         const lockedOut = await incrementAuthAttempts();
