@@ -1,7 +1,7 @@
 import { useIsFocused } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CredentialCard from '../components/CredentialCard';
 import { useToast } from '../components/Toast';
@@ -40,6 +40,15 @@ const HomeScreen = ({ navigation }) => {
 
   // Stats and Count updates automatically when credentials change via the useVault hook
   const upcomingCount = credentials.filter(c => c.reminder && !c.rFired && new Date(c.reminder) > new Date()).length;
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
+        <Text style={[styles.loadingText, { color: colors.muted }]}>Loading vault...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
@@ -229,6 +238,11 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     marginTop: 8,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 16,
+    fontWeight: '500',
   },
   fab: {
     position: 'absolute',

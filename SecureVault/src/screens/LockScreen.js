@@ -13,6 +13,7 @@ const LockScreen = ({ navigation }) => {
   const isAttempting = useRef(false);
   const [authError, setAuthError] = useState('');
   const [lockoutRemaining, setLockoutRemaining] = useState(0);
+  const [showManualUnlock, setShowManualUnlock] = useState(false);
   
   const fadeAnim = new Animated.Value(0);
   const scaleAnim = new Animated.Value(0.9);
@@ -40,6 +41,13 @@ const LockScreen = ({ navigation }) => {
     }
   };
 
+  const handleManualUnlock = () => {
+    // Allow manual unlock as fallback
+    authenticate().catch(err => {
+      setAuthError(err.message);
+    });
+  };
+
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
@@ -51,7 +59,19 @@ const LockScreen = ({ navigation }) => {
       const timer = setTimeout(() => {
         handleAuthenticate();
       }, 800);
-      return () => clearTimeout(timer);
+      
+      // Show manual unlock button after 5 seconds if biometric hasn't succeeded
+      const fallbackTimer = setTimeout(() => {
+        setShowManualUnlock(true);
+      }, 5000);
+      
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(fallbackTimer);
+      };
+    } else if (!loading && !securityEnabled) {
+      // If security is disabled, auto-unlock immediately
+      handleAuthenticate();
     }
   }, [loading, securityEnabled, isBiometricsAvailable]);
   
@@ -103,6 +123,19 @@ const LockScreen = ({ navigation }) => {
             ]}
           >
             <Text style={[styles.unlockBtnText, { color: colors.bg }]}>Unlock with Biometrics</Text>
+          </Pressable>
+        )}
+
+        {showManualUnlock && !isBiometricsAvailable && (
+          <Pressable 
+            onPress={handleManualUnlock}
+            disabled={lockoutRemaining > 0}
+            style={({ pressed }) => [
+              styles.unlockBtn,
+              { backgroundColor: colors.surf2, borderColor: colors.border, borderWidth: 1, opacity: pressed || lockoutRemaining > 0 ? 0.5 : 1 }
+            ]}
+          >
+            <Text style={[styles.unlockBtnText, { color: colors.textBright }]}>Unlock Manually</Text>
           </Pressable>
         )}
 

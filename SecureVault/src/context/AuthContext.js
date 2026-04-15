@@ -29,10 +29,23 @@ export const AuthProvider = ({ children }) => {
   const activityTimerRef = useRef(null);
 
   useEffect(() => {
-    loadSecuritySettings();
-    checkBiometrics();
-    loadSessionSettings();
-    loadAuthAttempts();
+    const init = async () => {
+      try {
+        await Promise.all([
+          loadSecuritySettings(),
+          checkBiometrics(),
+          loadSessionSettings(),
+          loadAuthAttempts()
+        ]);
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+      } finally {
+        // Ensure loading is always set to false after initialization
+        setLoading(false);
+      }
+    };
+    
+    init();
 
     // AppState listener for Auto-Lock
     const subscription = AppState.addEventListener('change', handleAppStateChange);
@@ -43,11 +56,17 @@ export const AuthProvider = ({ children }) => {
     // Session timeout check
     sessionTimerRef.current = setInterval(checkSessionTimeout, 60000); // Check every minute
 
+    // Fallback timeout to ensure loading is cleared even if something hangs
+    const fallbackTimer = setTimeout(() => {
+      setLoading(false);
+    }, 3000);
+
     return () => {
       subscription.remove();
       activitySubscription.remove();
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
       if (activityTimerRef.current) clearTimeout(activityTimerRef.current);
+      clearTimeout(fallbackTimer);
     };
   }, [securityEnabled, sessionTimeout]);
 

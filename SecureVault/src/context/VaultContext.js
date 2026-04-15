@@ -43,10 +43,18 @@ export const VaultProvider = ({ children }) => {
   useEffect(() => {
     const initialize = async () => {
       try {
-        await initializeEncryptionKey();
+        // Add timeout for key initialization to prevent hanging
+        const keyInitPromise = initializeEncryptionKey();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Key initialization timeout')), 5000)
+        );
+        
+        await Promise.race([keyInitPromise, timeoutPromise]);
         setKeyInitialized(true);
       } catch (error) {
         console.error('Failed to initialize encryption key:', error);
+        // Continue anyway - the app can still work without key initialization
+        setKeyInitialized(false);
       }
       await reloadCredentials();
     };
