@@ -68,8 +68,8 @@ export const VaultProvider = ({ children }) => {
     const dataToEncrypt = typeof data === 'string' ? data : JSON.stringify({ title, tags: tagsArray, data });
     const encData = await encrypt(dataToEncrypt);
     
-    // Keep reminder date unencrypted for display, but encrypt in encData
-    const reminderDateStr = reminder ? reminder.toISOString() : null;
+    // Keep reminder date unencrypted for display - handle both Date object and ISO string
+    const reminderDateStr = reminder && reminder instanceof Date ? reminder.toISOString() : (reminder || null);
     
     const newCred = {
       id: Date.now().toString(),
@@ -97,8 +97,8 @@ export const VaultProvider = ({ children }) => {
     const dataToEncrypt = typeof data === 'string' ? data : JSON.stringify({ title, tags: tagsArray, data });
     const encData = await encrypt(dataToEncrypt);
     
-    // Keep reminder date unencrypted for display
-    const reminderDateStr = reminder ? reminder.toISOString() : null;
+    // Keep reminder date unencrypted for display - handle both Date object and ISO string
+    const reminderDateStr = reminder && reminder instanceof Date ? reminder.toISOString() : (reminder || null);
     
     let updatedItem = null;
     const updatedList = credentials.map(c => {

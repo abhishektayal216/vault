@@ -155,7 +155,7 @@ const AddEditScreen = ({ route, navigation }) => {
         ? calculateNextOccurrence(reminder, recurrence, recurrenceDays, recurrenceMonths, intentionalDay)
         : reminder;
       
-      const reminderIso = finalReminder ? finalReminder.toISOString() : null;
+      const reminderIso = finalReminder && finalReminder instanceof Date ? finalReminder.toISOString() : null;
 
       let finalId = credential?.id;
 
